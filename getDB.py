@@ -9,9 +9,10 @@ def create_db():
                    CREATE TABLE IF NOT EXISTS members (
                         id INTEGER PRIMARY KEY,
                         numberno INTEGER,
-                        join_date DATE,
+                        joined_date DATE,
                         realname TEXT,
                         name TEXT,
+                        highest_role TEXT,
                         credit INTEGER DEFAULT 0,
                         level INTEGER DEFAULT 1
                    )
