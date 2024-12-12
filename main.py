@@ -21,20 +21,96 @@ def has_permission(user, required_roles):
 
         return False
     
-def update_data(member_id, number_no, join_date, member_realname, member_name, member_credit, member_level):
-    conn = sqlite3.connect("data.db")
-    cursor = conn.cursor()
+def member_create_data(member_id, numberno, joined_date, realname, name, highest_role):
+    try:
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+
+        query = f"""
+            INSERT INTO members (id, numberno, joined_date, realname, name, highest_role, credit, level)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+"""
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+    except ValueError as ve:
+        print(ve)
+    finally:
+        if conn:
+            conn.close()
+
+def get_data(member_id, type: str):
+    """
+    Retrieves specific data (e.g., credits, level) for a member from the database.
+
+    Args:
+        member_id (int): The ID of the member.
+        type_of_data (str): The column name of the data to retrieve (e.g., 'credits', 'level').
+
+    Returns:
+        The requested data if found, otherwise None.
+    """
+    try:
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+
+        # validate the type
+        valid_columns = ["name", "highest_role", "credit", "level"]
+        if type not in valid_columns:
+            raise ValueError(f"Invalid type of data")
+        
+        query = f"Select {type} FROM members WHERE id =?"
+
+        cursor.execute(query, (member_id,))
+        result = cursor.fetchone()
+
+        if result:
+            return result[0]
+        else:
+            return None
+        
+    except sqlite3.error as e:
+        print(f"Database error: {e}")
+        return None
     
-    cursor.execute("""
-                   INSERT INTO members (id, numberno, join_date, realname, name, credit, level)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(id) DO UPDATE SET
-                        name = ?,
-                        credit = ?,
-                        level = ?
-""", (member_id, number_no, join_date, member_realname, member_name, member_credit, member_level, member_name, member_credit, member_level))
-    conn.commit()
-    conn.close()
+    except ValueError as ve:
+        print(ve)
+        return None
+    
+    finally:
+        if conn:
+            conn.close()
+            
+def update_data(member_id, type: str, newValue):
+    """
+    Updates specific data (e.g., credits, level) for a member in the database.
+
+    Args:
+        member_id (int): The ID of the member.
+        type_of_data (str): The column name to update (e.g., 'credits', 'level').
+        new_value: The new value for the column.
+    """
+    try:
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        
+        valid_columns = ["name", "highest_role", "credit", "level"]
+        if type not in valid_columns:
+            raise ValueError(f"Invalid type of data")
+        
+
+        query = f"UPDATE members SET {type} = ? WHERE id = ?"
+
+        cursor.execute(query, (member_id,))
+        conn.commit()
+    except sqlite3.error as e:
+        print(f"Database error: {e}")
+    except ValueError as ve:
+        print(ve)
+
+    finally:
+        if conn:
+            conn.close()
 
 def member_exist(member_id):
     conn = sqlite3.connect("data.db")
@@ -47,26 +123,7 @@ def member_exist(member_id):
 
     return result is not None
 
-def create_db():
-    conn = sqlite3.connect("data.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-                   CREATE TABLE IF NOT EXISTS members (
-                        id INTEGER PRIMARY KEY,
-                        numberno INTEGER,
-                        join_date DATE,
-                        realname TEXT,
-                        name TEXT,
-                        credit INTEGER DEFAULT 0,
-                        level INTEGER DEFAULT 1
-                   )
-                   """)
-    conn.commit()
-    conn.close()
-
-# create_db()
-
+# create bot
 class Bot(discord.Client):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(intents=intents)
@@ -125,33 +182,40 @@ class Bot(discord.Client):
             print("System: Failed to create background task...\nError:", e)
 
     async def on_member_join(self, member: discord.Member):
-        civilRole = discord.utils.get(self.guild.roles, name="Civilian")
-        if not member_exist(member.id):
-            embed = discord.Embed(
-                    colour=discord.Colour.dark_teal(),
-                    title=f'Welcome, {member.display_name} joined Xenia!',
-                    description=f'Chào mừng bạn đã đến với chúng tôi<3.\nĐừng quên đọc qua luật {self.ruleChannel.mention} để không bị ban ngoài ý muốn nhé<3.\nVà đồng thời nhớ pick role {self.pickRoleChannel.mention} để có thể tham gia vào nhiều vùng khác nhau<3'
-                )
-            embed.set_footer(text=f"Thank you! Enjoy your journey ❤️")
-        else:
-            embed = discord.Embed(
-                colour=discord.Colour.dark_teal(),
-                title=f'Welcome back, {member.display_name}!',
-                description=f'Chào mừng bạn quay trở lại với chúng tôi.\nĐừng quên đọc qua luật {self.ruleChannel.mention} để không bị ban ngoài ý muốn nhé<3.\nVà đồng thời nhớ pick role {self.pickRoleChannel.mention} để có thể tham gia vào nhiều vùng khác nhau<3'
-            )
-            embed.set_footer(text=f"Thank you! Continue our journey 🎊")
         try:
-            await member.add_roles(civilRole)
-            highest_role = sorted(member.roles, key=lambda role: role.position, reverse=True)[0]
-            await member.edit(nick=f"{highest_role}| {member.display_name}")
-            update_data(member.id, len(self.guild.members), member.joined_at, member.name, member.nick, 0, 1)
+            if not member_exist(member.id):
+                embed = discord.Embed(
+                        colour=discord.Colour.dark_teal(),
+                        title=f'Welcome, {member.display_name} joined Xenia!',
+                        description=f'Chào mừng bạn đã đến với chúng tôi<3.\nĐừng quên đọc qua luật {self.ruleChannel.mention} để không bị ban ngoài ý muốn nhé<3.\nVà đồng thời nhớ pick role {self.pickRoleChannel.mention} để có thể tham gia vào nhiều vùng khác nhau<3'
+                    )
+                embed.set_footer(text=f"Thank you! Enjoy your journey ❤️")
+                civilRole = discord.utils.get(self.guild.roles, name="Civilian")
+                await member.add_roles(civilRole)
+                member_role = sorted(member.roles, key=lambda role: role.position, reverse=True)[0]
+                member_create_data(member_id=member.id, 
+                                   numberno=len(self.guild.members), 
+                                   joined_date=member.joined_at, 
+                                   realname=member.name, 
+                                   name=member_role+"| "+member.display_name,
+                                   highest_role=member_role
+                                   )
+            else:
+                embed = discord.Embed(
+                    colour=discord.Colour.dark_teal(),
+                    title=f'Welcome back, {member.display_name}!',
+                    description=f'Chào mừng bạn quay trở lại với chúng tôi.\nĐừng quên đọc qua luật {self.ruleChannel.mention} để không bị ban ngoài ý muốn nhé<3.\nVà đồng thời nhớ pick role {self.pickRoleChannel.mention} để có thể tham gia vào nhiều vùng khác nhau<3'
+                )
+                embed.set_footer(text=f"Thank you! Continue our journey 🎊")
+                member_role = get_data(member.id, "highest_role")
+                
+            await member.edit(nick=f"{member_role}| {member.display_name}")
             await self.welcomeChannel.send(embed=embed)
         except discord.Forbidden:
             print("System: Bot does not have enough permissions.")
         except discord.HTTPException as e:
             if e.status == 429:
                 print("System: Bot is overloading...")
-
 
     async def on_member_remove(self, member: discord.Member):
         embed = discord.Embed(
@@ -174,13 +238,11 @@ class Bot(discord.Client):
                 await self.cBot.edit(name=f"Bots: {self.numOfBot}")
             await asyncio.sleep(60*5)
 
-
-
+# initialize client
 intents = discord.Intents.all()
 client = Bot(intents=intents)
 
-
-
+# slash commands
 @client.tree.command()
 async def set_nickname(interaction: discord.Interaction, user: discord.User, nickname: str):
     """Chỉ có Dev và Admin mới có thể dùng lệnh này"""
@@ -205,7 +267,6 @@ async def set_nickname(interaction: discord.Interaction, user: discord.User, nic
         await interaction.response.send_message(f"Đã thay đổi nickname của {user} thành {nickname}!", ephemeral=True)
     except discord.Forbidden:
         await interaction.response.send_message("Tôi không có quyền để thay đổi nickname", ephemeral=True)
-
 
 if __name__ == '__main__':
     client.run(os.getenv("TOKEN"))
