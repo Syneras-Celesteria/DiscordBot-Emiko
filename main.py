@@ -29,7 +29,8 @@ def member_create_data(member_id, numberno, joined_date, realname, name, highest
         query = f"""
             INSERT INTO members (id, numberno, joined_date, realname, name, highest_role, credit, level)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-"""
+""" 
+        cursor.execute(query, (member_id, numberno, joined_date, realname, name, highest_role, 0, 1))
         conn.commit()
     except sqlite3.Error as e:
         print(f"Database error: {e}")
@@ -147,7 +148,7 @@ class Bot(discord.Client):
 
     async def setup_hook(self):
         # self.tree.clear_commands(guild=MY_GUILD)
-        # await self.tree.sync()
+        # await self.tree.sync(guild=MY_GUILD)
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
 
@@ -197,8 +198,8 @@ class Bot(discord.Client):
                                    numberno=len(self.guild.members), 
                                    joined_date=member.joined_at, 
                                    realname=member.name, 
-                                   name=member_role+"| "+member.display_name,
-                                   highest_role=member_role
+                                   name=f"{member_role}| {member.display_name}",
+                                   highest_role=f"{member_role}"
                                    )
             else:
                 embed = discord.Embed(
@@ -245,11 +246,11 @@ client = Bot(intents=intents)
 # slash commands
 @client.tree.command()
 async def set_nickname(interaction: discord.Interaction, user: discord.User, nickname: str):
-    """Chỉ có Dev và Admin mới có thể dùng lệnh này"""
+    """Chỉ có Dev trở lên mới dùng được lệnh này"""
     guild = interaction.guild
     member = guild.get_member(user.id)
 
-    if not has_permission(interaction.user, ["Dev", "Administrator"]):
+    if not has_permission(interaction.user, ["Dev", "Admin"]):
         await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này!", ephemeral=True)
         return
 
@@ -267,6 +268,39 @@ async def set_nickname(interaction: discord.Interaction, user: discord.User, nic
         await interaction.response.send_message(f"Đã thay đổi nickname của {user} thành {nickname}!", ephemeral=True)
     except discord.Forbidden:
         await interaction.response.send_message("Tôi không có quyền để thay đổi nickname", ephemeral=True)
+
+@client.tree.command()
+async def set_data(interaction: discord.Interaction, user: discord.User):
+    """Chỉ có Dev trở lên mới dùng được lệnh này"""
+    guild = interaction.guild
+    member = guild.get_member(user.id)
+
+    if not has_permission(interaction.user, ["Dev", "Admin"]):
+        await interaction.response.send_message("Bạn không có quyền sử dụng lệnh này!", ephemeral=True)
+        return
+    
+    highest_role = f"{sorted(member.roles, key=lambda role: role.position, reverse=True)[0]}"
+    try:
+        member_create_data(member.id, len(guild.members), member.joined_at, member.name, member.nick, highest_role)
+        await interaction.response.send_message(f"Đã cài đặt thành công data của người dùng {member.display_name}", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"Có lỗi diễn ra khi cài đặt data ERROR: {e}")
+
+@client.tree.command()
+async def re_welcome(interaction: discord.Interaction, user: discord.User):
+    """Admin Only"""
+    name = user.display_name.split(" ", 1)[1]
+    if not has_permission(interaction.user, ["Admin"]):
+        await interaction.response.send_message("Bạn không có quyền để sử dụng lệnh này!", ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+                        colour=discord.Colour.dark_teal(),
+                        title=f'Welcome, {name} joined Xenia!',
+                        description=f'Chào mừng bạn đã đến với chúng tôi<3.\nĐừng quên đọc qua luật {client.ruleChannel.mention} để không bị ban ngoài ý muốn nhé<3.\nVà đồng thời nhớ pick role {client.pickRoleChannel.mention} để có thể tham gia vào nhiều vùng khác nhau<3'
+                        )
+    embed.set_footer(text=f"Thank you! Enjoy your journey ❤️")
+    await client.welcomeChannel.send(embed=embed)
 
 if __name__ == '__main__':
     client.run(os.getenv("TOKEN"))
